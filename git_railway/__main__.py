@@ -29,7 +29,7 @@ from git_railway.model import (
     arrange_commits,
     collect_commits,
     generate_commit_data,
-    get_heads,
+    get_refs,
 )
 from git_railway.view.html import write_html
 from git_railway.view.svg import SvgRailway
@@ -67,7 +67,7 @@ def main():
     args = parse_args()
 
     commits, children = collect_commits(repo)
-    heads = get_heads(repo)
+    heads, tags = get_refs(repo)
 
     locations = arrange_commits(commits, heads, children)
 
@@ -77,7 +77,9 @@ def main():
 
     output = os.path.abspath(os.path.expanduser(args.output)) or "railway.html"
     with open(output, "w") as fout:
-        write_html(fout, svg.draw(commits, locations, heads, children), commit_data)
+        write_html(
+            fout, svg.draw(commits, locations, heads, tags, children), commit_data
+        )
 
     print(f"🚂💨✨  Railway graph generated on file://{output}")
 

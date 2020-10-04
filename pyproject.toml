@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "git-railway"
-version = "0.1.0"
+version = "0.1.1"
 description = "Visualise local git branches as neat interactive HTML pages"
 authors = ["Gabriele N. Tornetta <phoenix1987@gmail.com>"]
 license = "GPL-3.0-or-later"

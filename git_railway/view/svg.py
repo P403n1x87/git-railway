@@ -215,7 +215,7 @@ class SvgRailway(Drawing, LayeredMixin):
             )
         )
 
-    def draw(self, commits, locations, heads, children):
+    def draw(self, commits, locations, heads, tags, children):
         max_y = max(y for _, (_, y) in locations.items())
         max_x = max(x for _, (x, _) in locations.items())
 
@@ -272,6 +272,12 @@ class SvgRailway(Drawing, LayeredMixin):
             self.stop(x, y, "#dbdbdb", commit)
 
         for h, refs in heads.items():
+            x, y = locations[h]
+            y = max_y - y
+            for i, ref in enumerate(refs):
+                self.ref(ref, max_x, y, ref_to_color(ref), i)
+
+        for h, refs in tags.items():
             x, y = locations[h]
             y = max_y - y
             for i, ref in enumerate(refs):

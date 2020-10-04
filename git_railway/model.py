@@ -25,7 +25,6 @@ from datetime import datetime
 import re
 from typing import Dict, List, Set, Tuple
 
-from git_railway.adt import Map
 from git import Head, Repo, Commit, Reference, TagReference
 
 
@@ -112,18 +111,22 @@ def collect_commits(
     return labelled_commits, children
 
 
-def get_heads(repo: Repo) -> Dict[Hash, List[Reference]]:
-    """Get all the current heads, indexed by commit hash.
+def get_refs(
+    repo: Repo
+) -> Tuple[Dict[Hash, List[Head]], Dict[Hash, List[TagReference]]]:
+    """Get all the current heads and tags, indexed by commit hash.
 
     Used to easily determine which commits are heads and what refs are on them.
     """
     heads = defaultdict(list)
     for head in repo.heads:
         heads[head.commit.hexsha].append(head)
-    for tag in repo.tags:
-        heads[tag.commit.hexsha].append(tag)
 
-    return heads
+    tags = defaultdict(list)
+    for tag in repo.tags:
+        tags[tag.commit.hexsha].append(tag)
+
+    return heads, tags
 
 
 def arrange_commits(
@@ -140,13 +143,6 @@ def arrange_commits(
     """
     sorted_commits = sorted(commits.items(), key=lambda x: x[1][0].committed_date)
     h, (initial, refs) = sorted_commits[0]  # Initial commit
-
-    # Filter out tags.
-    heads = {
-        head: [r for r in heads[head] if isinstance(r, Head)]
-        for head, refs in heads.items()
-        if [r for r in heads[head] if isinstance(r, Head)]
-    }  # TODO: Suboptimal!
 
     # Map the head commits with their children.
     head_children = {

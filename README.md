@@ -55,7 +55,7 @@
 Installation from the repository requires Poetry
 
 ~~~
-pip install poetry https://github.com/p403n1x87/git-railway
+pip install poetry git+https://github.com/p403n1x87/git-railway
 ~~~
 
 Soon available from PyPI!

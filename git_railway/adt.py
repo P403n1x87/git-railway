@@ -20,8 +20,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from collections import defaultdict
-
 
 class IndexedList(list):
     """List with an underlying index for fast lookups."""
@@ -48,23 +46,3 @@ class IndexedList(list):
 
     def pop(self):
         del self._index[super().pop()[0]]
-
-
-class Map(dict):
-    """Dictionary mapping with fast preimage computation."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        self._inverse = defaultdict(set)
-
-    def __setitem__(self, k, v):
-        super().__setitem__(k, v)
-        self._inverse[v].add(k)
-
-    def preimage(self, v):
-        return self._inverse[v]
-
-    @property
-    def image(self):
-        return set(self._image.keys())
