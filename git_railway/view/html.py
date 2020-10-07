@@ -29,7 +29,7 @@ TEMPLATE = """<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Git Railway</title>
+  <title>{title} - Git Railway</title>
   <style>
     html, body {{
       width: 100%;
@@ -189,5 +189,5 @@ TEMPLATE = """<!doctype html>
 """
 
 
-def write_html(stream, svg: str, commit_data) -> None:
-    stream.write(TEMPLATE.format(svg=svg, data=json.dumps(commit_data)))
+def write_html(stream, svg: str, commit_data, title: str) -> None:
+    stream.write(TEMPLATE.format(svg=svg, data=json.dumps(commit_data), title=title))

@@ -69,14 +69,32 @@ Navigate to a git repository and run
 git-railway
 ~~~
 
-Your railway graph will be generated in `railway.html`. Use the `-o` or `--output` option to override the default location, e.g.
+Your railway graph will be generated in `railway.html`. Use the `-o` or
+`--output` option to override the default location, e.g.
 
 ~~~ shell
 git-railway --output /tmp/mytemprailwaygraph.html
 ~~~
 
-If the remote repository is hosted on GitHub, you can have issue and PR references replaced with actual links if you pass the GitHub slug using the `--gh` option, e.g.
+If the remote repository is hosted on GitHub, you can have issue and PR
+references replaced with actual links if you pass the GitHub slug using the
+`--gh` option, e.g.
 
 ~~~ shell
 git-railway --gh p403n1x87/git-railway
 ~~~
+
+
+# A word on branches
+
+As you probably know already, a branch in git is a mere reference (or label)
+that moves with every new commit. As such, it's hard if not impossible to
+reconstruct the *actual* branch from the information available from within a git
+repository. This tools works by looking at the current local refs and collecting
+all the commits that can be reached from them. The "branches" are the
+reconstructed "best effort" by looking at the reflog to determine on which
+commit a certain ref has been on. Sometimes this information is missing. For
+example, when one does a merge by fast-forwarding, all the intermediate commits
+are not marked with the ref of the target branch. Should they be part of the
+branch or not? Whenever you see a piece of gray rail in the graph, that's where
+the ref information is missing.

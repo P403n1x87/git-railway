@@ -57,8 +57,8 @@ class LayeredMixin:
 
 
 class SvgRailway(Drawing, LayeredMixin):
-    STEP_X = 16
-    STEP_Y = 28
+    STEP_X = 24
+    STEP_Y = 30
     PADDING_X = 50
     PADDING_Y = 8
     STOP_R = 5
@@ -73,20 +73,63 @@ class SvgRailway(Drawing, LayeredMixin):
         self.add_layer("stops")
         self.add_layer("labels")
 
-    def rail(self, x, y, px, py, colors):
+    @staticmethod
+    def _add_s(path, dx=1, dy=1):
+        path.push(
+            "c",
+            0,
+            SvgRailway.STEP_Y * (1 / 5) * dy,
+            -SvgRailway.STEP_X * (1 / 4) * dx,
+            SvgRailway.STEP_Y * (2 / 5) * dy,
+            -SvgRailway.STEP_X * (1 / 2) * dx,
+            SvgRailway.STEP_Y * (1 / 2) * dy,
+        )
+        path.push(
+            "c",
+            -SvgRailway.STEP_X * (1 / 4) * dx,
+            SvgRailway.STEP_Y * (1 / 10) * dy,
+            -SvgRailway.STEP_X * (1 / 2) * dx,
+            SvgRailway.STEP_Y * (3 / 10) * dy,
+            -SvgRailway.STEP_X * (1 / 2) * dx,
+            SvgRailway.STEP_Y * (1 / 2) * dy,
+        )
+
+    def rail(self, x, y, px, py, colors, middle):
         # Move to the current commit
         layer = self.get_layer("rails")
 
         n = len(colors)
         w = self.RAIL_W / n
         dX = -(n - 1) / 2 * w
+        dx = x - px
         for i, color in enumerate(colors):
-            if x != px:
+            if middle:
+                dl = dr = dx
+                if dl & 1 == 0:
+                    dl -= 1
+                    dr += 1
+                path = self.path(
+                    [
+                        (
+                            "M",
+                            self.PADDING_X + x * self.STEP_X + dX + i * w,
+                            self.PADDING_Y + self.STEP_Y * y,
+                        )
+                    ],
+                    stroke=color,
+                    stroke_width=w,
+                    fill="none",
+                )
+                SvgRailway._add_s(path, dl / 2)
+                path.push("V", self.PADDING_Y + self.STEP_Y * (py - 1))
+                SvgRailway._add_s(path, dr / 2)
+                layer.insert(0, path)
+
+            elif dx:
                 # Parent commit is on a different level so we need to draw a
                 # straight line up to the previous commit and then add a Bezier
                 # curve to make a smooth connection
-                v = x - px
-                if v > 0:
+                if dx > 0:
                     path = self.path(
                         [
                             (
@@ -100,24 +143,7 @@ class SvgRailway(Drawing, LayeredMixin):
                         fill="none",
                     )
                     path.push("V", self.PADDING_Y + self.STEP_Y * (py - 1))
-                    path.push(
-                        "c",
-                        0,
-                        self.STEP_Y * (1 / 5),
-                        -self.STEP_X * (1 / 4) * v,
-                        self.STEP_Y * (2 / 5),
-                        -self.STEP_X * (1 / 2) * v,
-                        self.STEP_Y * (1 / 2),
-                    )
-                    path.push(
-                        "c",
-                        -self.STEP_X * (1 / 4) * v,
-                        self.STEP_Y * (1 / 10),
-                        -self.STEP_X * (1 / 2) * v,
-                        self.STEP_Y * (3 / 10),
-                        -self.STEP_X * (1 / 2) * v,
-                        self.STEP_Y * (1 / 2),
-                    )
+                    SvgRailway._add_s(path, dx)
                     layer.insert(0, path)
                 else:
                     path = self.path(
@@ -133,24 +159,7 @@ class SvgRailway(Drawing, LayeredMixin):
                         fill="none",
                     )
                     path.push("V", self.PADDING_Y + self.STEP_Y * (y + 1))
-                    path.push(
-                        "c",
-                        0,
-                        -self.STEP_Y * (1 / 5),
-                        self.STEP_X * (1 / 4) * v,
-                        -self.STEP_Y * (2 / 5),
-                        self.STEP_X * (1 / 2) * v,
-                        -self.STEP_Y * (1 / 2),
-                    )
-                    path.push(
-                        "c",
-                        self.STEP_X * (1 / 4) * v,
-                        -self.STEP_Y * (1 / 10),
-                        self.STEP_X * (1 / 2) * v,
-                        -self.STEP_Y * (3 / 10),
-                        self.STEP_X * (1 / 2) * v,
-                        -self.STEP_Y * (1 / 2),
-                    )
+                    SvgRailway._add_s(path, -dx, -1)
                     layer.insert(0, path)
 
             else:
@@ -229,6 +238,12 @@ class SvgRailway(Drawing, LayeredMixin):
         for h, (commit, refs) in commits.items():
             x, y = locations[h]
             y = max_y - y
+            singletons = {
+                ref
+                for p in commit.parents
+                for ref in commits[p.hexsha][1]
+                if len(commits[p.hexsha][1]) == 1
+            }
             for ph in [p.hexsha for p in commit.parents]:
                 try:
                     px, py = locations[ph]
@@ -242,7 +257,11 @@ class SvgRailway(Drawing, LayeredMixin):
                 try:
                     common = set(prefs) & set(refs)
                     if len(refs) > 1 and common:
-                        colors = [ref_to_color(ref) for ref in common]
+                        colors = [
+                            ref_to_color(ref)
+                            for ref in common
+                            if len(prefs) == 1 or ref not in singletons
+                        ]
 
                     else:
                         used_refs = {
@@ -260,7 +279,20 @@ class SvgRailway(Drawing, LayeredMixin):
                     colors = ["gray"]
                 if not colors:
                     colors = ["gray"]
-                self.rail(x, y, px, py, colors)
+
+                self.rail(
+                    x,
+                    y,
+                    px,
+                    py,
+                    colors,
+                    x != px
+                    and any(
+                        True
+                        for _, (rx, ry) in locations.items()
+                        if rx == (px if px > x else x) and py > max_y - ry > y
+                    ),
+                )
 
             # try:
             #     if len(refs) > 1 and common:

@@ -56,13 +56,19 @@ def parse_args():
 
 
 def main():
-    try:
-        repo = Repo(os.getcwd())
-    except InvalidGitRepositoryError:
-        print(
-            "The current working directory doesn't seem to be tracked by a git repository."
-        )
-        exit(1)
+
+    cwd = os.getcwd()
+    path = cwd
+    while True:
+        try:
+            repo = Repo(path)
+            break
+        except InvalidGitRepositoryError:
+            newpath = os.path.dirname(path)
+            if newpath == path:
+                print("👮‍♀️🛑  Not in a git repository")
+                exit(1)
+            path = newpath
 
     args = parse_args()
 
@@ -78,10 +84,13 @@ def main():
     output = os.path.abspath(os.path.expanduser(args.output)) or "railway.html"
     with open(output, "w") as fout:
         write_html(
-            fout, svg.draw(commits, locations, heads, tags, children), commit_data
+            fout,
+            svg.draw(commits, locations, heads, tags, children),
+            commit_data,
+            title=os.path.basename(path),
         )
 
-    print(f"🚂💨✨  Railway graph generated on file://{output}")
+    print(f"🚂💨  Railway graph generated on ✨ file://{output} ✨")
 
 
 if __name__ == "__main__":
