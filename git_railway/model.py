@@ -23,6 +23,7 @@
 from collections import defaultdict
 from datetime import datetime
 import logging
+import os
 import re
 from typing import Dict, List, Set, Tuple
 
@@ -35,7 +36,9 @@ handler.setFormatter(
     logging.Formatter("%(asctime)s %(name)-12s %(levelname)-8s %(message)s")
 )
 LOGGER.addHandler(handler)
-LOGGER.setLevel(logging.INFO)
+LOGGER.setLevel(
+    getattr(logging, os.environ.get("GIT_RAILWAY_DEBUG_LEVEL", "INFO").upper())
+)
 
 
 ISSUE_RE = re.compile("#([0-9]+)")
@@ -151,6 +154,19 @@ def arrange_commits(
     to avoid crossing rails, from the other we do not want the width of the
     lattice to grow without control.
     """
+
+    def gap() -> int:
+        """Get the first gap in the tracked levels."""
+        if not refs_levels:
+            return 0
+
+        levels = sorted({l for _, l in refs_levels.items()})
+        for n, m in zip(levels, levels[1:]):
+            if m - n > 1:
+                return n + 1
+
+        return levels[-1] + 1
+
     sorted_commits = sorted(commits.items(), key=lambda x: x[1][0].committed_date)
     h, (initial, refs) = sorted_commits[0]  # Initial commit
 
@@ -171,7 +187,6 @@ def arrange_commits(
     refs_levels = {ref: 0 for ref in refs}
     seen_heads = set()
 
-    # head_children = {h: head_children.preimage(h) for h in heads}
     locations = {h: (0, 0)}
     for h, (c, refs) in sorted_commits[1:]:
         x = None
@@ -210,46 +225,7 @@ def arrange_commits(
             LOGGER.debug(
                 f"    future children: { [(p.hexsha[:7], {child[:7] for child in children[p.hexsha] if commits[child][0].committed_date > c.committed_date}) for p in c.parents]}"
             )
-            x = (
-                1
-                + max(l for _, l in refs_levels.items())
-                + min(
-                    sum(
-                        1
-                        for child in {
-                            child
-                            for child in children[p.hexsha]
-                            if commits[child][0].committed_date > c.committed_date
-                        }
-                        if not commits[child][1] & set(refs_levels)
-                        or (
-                            commits[child][1] & commits[p.hexsha][1] & active_refs
-                            == commits[p.hexsha][1] & active_refs
-                        )
-                    )
-                    for p in c.parents
-                )
-                if refs_levels
-                else 0
-            )
-
-            # x = min(
-            #     locations[p.hexsha][0]
-            #     + sum(
-            #         1
-            #         for child in {
-            #             child
-            #             for child in children[p.hexsha]
-            #             if commits[child][0].committed_date > c.committed_date
-            #         }
-            #         if not commits[child][1] & set(refs_levels)
-            #         or (
-            #             commits[child][1] & commits[p.hexsha][1]
-            #             == commits[p.hexsha][1]
-            #         )
-            #     )
-            #     for p in c.parents
-            # )
+            x = gap()
         else:  # Commit has tracked refs
             LOGGER.debug("  commit has tracked refs")
             px = {}
@@ -272,9 +248,9 @@ def arrange_commits(
                             [
                                 (
                                     child,
-                                    commits[child][1],
-                                    commits[p.hexsha][1],
-                                    active_refs,
+                                    [r.name for r in commits[child][1]],
+                                    [r.name for r in commits[p.hexsha][1]],
+                                    [r.name for r in active_refs],
                                 )
                                 for p in c.parents
                                 for child in children[p.hexsha]
@@ -282,8 +258,11 @@ def arrange_commits(
                             ]
                         )
                     )
-                    x = locations[p.hexsha][0] + (
-                        1
+                    # if a parent of this commit has a child with the same
+                    # active references then the rail from that parent goes
+                    # straight and we need to move to a new level.
+                    x = (
+                        gap()
                         if any(
                             commits[child][1] & commits[p.hexsha][1] & active_refs
                             == commits[p.hexsha][1] & active_refs
@@ -291,50 +270,38 @@ def arrange_commits(
                             for child in children[p.hexsha]
                             if child != h
                         )
-                        else 0
+                        else locations[p.hexsha][0]
                     )
+
                 elif any(
-                    {
-                        r
-                        for r, j in refs_levels.items()
-                        if j == i and r in refs & active_refs
-                    }
+                    {r for r, j in refs_levels.items() if j == i and r in current_refs}
                     < commits[p.hexsha][1] & active_refs
-                    for i in range(m + 1)
+                    for i in {l for _, l in refs_levels.items()}
                 ):
+                    # currently active refs on commit are a proper subset of
+                    # currently active parent refs at each tracked level.
                     LOGGER.debug(
                         f"    diverged from parent: {current_refs} < {commits[p.hexsha][1]}"
                     )
+                    # try lowest ref
                     x = min(refs_levels[ref] for ref in current_refs)
                     LOGGER.debug(
                         f"    {x} =?= {locations[p.hexsha][0]} :: {[r.name for r in commits[p.hexsha][1]]} <?= {[r.name for r in active_refs]}"
                     )
-                    if (
-                        x
-                        == locations[p.hexsha][0]
-                        # and commits[p.hexsha][1] <= active_refs
-                    ):
-                        LOGGER.debug("      need a new level")
-                        x = (
-                            len(
-                                {
-                                    child
-                                    for child in children[p.hexsha]
-                                    if commits[child][0].committed_date
-                                    > c.committed_date
-                                }
-                            )
-                            + m
-                        )
-                elif not commits[p.hexsha][1]:
-                    x = locations[p.hexsha][0]
+                    if x == locations[p.hexsha][0]:
+                        # lowest ref is same level as parent but we have
+                        # diverged from this parent so we must go on a
+                        # different level.
+                        x = gap()
+                        LOGGER.debug(f"      need a new level: m = {m}, x = {x}")
+                elif not commits[p.hexsha][1]:  # parent has no refs
+                    x = locations[p.hexsha][0]  # use parent level
                 else:
-                    LOGGER.debug("    new level")
-                    x = 1 + m
+                    x = gap()
+                    LOGGER.debug(f"    new level: {x}")
+
                 px[p.hexsha] = x
             x = min(l for _, l in px.items())
-            # while x in {l for _, l in refs_levels.items()}:
-            #     x += 1
 
         locations[h] = (x, len(locations))
 
@@ -350,18 +317,6 @@ def arrange_commits(
             # Remove the child from the set of children of all its parent heads
             for head in children_head[h]:
                 head_children[head].remove(h)
-
-        # Check if we can untrack any marked heads (i.e. we have already seen
-        # all its child commits).
-        # for head in set(seen_heads):
-        #     if not head_children[head]:
-        #         seen_heads.remove(head)
-        #         try:
-        #             for ref in heads[head]:
-        #                 del refs_levels[ref]
-        #                 LOGGER.debug(f"  removed {ref.name}")
-        #         except KeyError:
-        #             pass
 
         for head in set(seen_heads):
             seen_heads.remove(head)
