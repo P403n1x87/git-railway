@@ -18,9 +18,9 @@
     <img src="https://github.com/P403n1x87/git-railway/workflows/Tests/badge.svg"
          alt="GitHub Actions: Tests">
   </a> -->
-  <a href="https://travis-ci.com/P403n1x87/git-railway">
-    <img src="https://travis-ci.com/P403n1x87/git-railway.svg?token=fzW2yzQyjwys4tWf9anS"
-         alt="Travis CI">
+	<a href="https://github.com/P403n1x87/git-railway/actions?workflow=Release">
+    <img src="https://github.com/P403n1x87/git-railway/workflows/Release/badge.svg"
+         alt="GitHub Actions: Tests">
   </a>
   <!-- <a href="https://codecov.io/gh/P403n1x87/git-railway">
     <img src="https://codecov.io/gh/P403n1x87/git-railway/branch/master/graph/badge.svg"
@@ -52,18 +52,16 @@
 
 # Installation
 
-Installation from the repository requires Poetry
+Git Railway is available from PyPI
 
 ~~~
-pip install poetry git+https://github.com/p403n1x87/git-railway
+pip install git-railway
 ~~~
-
-Soon available from PyPI!
 
 
 # Usage
 
-Navigate to a git repository and run
+Navigate to a git repository, or any sub-folder, and run
 
 ~~~ shell
 git-railway
@@ -96,5 +94,5 @@ reconstructed "best effort" by looking at the reflog to determine on which
 commit a certain ref has been on. Sometimes this information is missing. For
 example, when one does a merge by fast-forwarding, all the intermediate commits
 are not marked with the ref of the target branch. Should they be part of the
-branch or not? Whenever you see a piece of gray rail in the graph, that's where
+branch or not? Whenever you see a piece of grey rail in the graph, that's where
 the ref information is missing.
