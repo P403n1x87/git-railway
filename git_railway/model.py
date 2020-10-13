@@ -27,6 +27,7 @@ import os
 import re
 from typing import Dict, List, Set, Tuple
 
+from git_railway.adt import Map
 from git import Head, Repo, Commit, Reference, TagReference
 
 
@@ -61,10 +62,8 @@ def pretty_date(time: int) -> str:
     if day_diff < 0:
         return ""
 
-    if day_diff == 0:
-        return "Today"
-    if day_diff == 1:
-        return "Yesterday"
+    if day_diff <= 1:
+        return "a day ago"
     if day_diff < 7:
         return f"{day_diff} days ago"
     if day_diff < 31:
@@ -83,7 +82,7 @@ def pretty_date(time: int) -> str:
 
 
 def collect_commits(
-    repo: Repo
+    repo: Repo, all: bool = False
 ) -> Tuple[Dict[Hash, Tuple[Commit, Set[Reference]]], Dict[Hash, Set[Hash]]]:
     """Collect commit information from a repository.
 
@@ -108,9 +107,23 @@ def collect_commits(
             children[p.hexsha].add(commit.hexsha)
             add_commits(p)
 
+    tracking = Map()
+
     # Collect all the commits that are reachable from the current heads
     for head in repo.heads:
+        remote_ref = head.tracking_branch()
+        if remote_ref:
+            tracking[remote_ref] = head
         add_commits(head.commit)
+
+    for tag in repo.tags:
+        if tag.commit.hexsha not in commits:
+            add_commits(tag.commit)
+
+    if all:
+        remote_refs = [ref for remote in repo.remotes for ref in remote.refs]
+        for ref in remote_refs:
+            add_commits(ref.commit)
 
     # Look at the reflog to infer what ref was on which commit.
     labelled_commits = {h: (c, set()) for h, c in commits.items()}
@@ -118,14 +131,26 @@ def collect_commits(
         for h in [e.newhexsha for e in head.log()]:
             try:
                 labelled_commits[h][1].add(head)
+                # if head in tracking.image:
+                #     labelled_commits[h][1].add(tracking.inv(head))
             except KeyError:
                 pass
+
+    if all:
+        for ref in [
+            ref for remote in repo.remotes for ref in remote.refs if ref not in tracking
+        ]:
+            for h in [e.newhexsha for e in ref.log()]:
+                try:
+                    labelled_commits[h][1].add(ref)
+                except KeyError:
+                    pass
 
     return labelled_commits, children
 
 
 def get_refs(
-    repo: Repo
+    repo: Repo, all: bool = False
 ) -> Tuple[Dict[Hash, List[Head]], Dict[Hash, List[TagReference]]]:
     """Get all the current heads and tags, indexed by commit hash.
 
@@ -134,6 +159,10 @@ def get_refs(
     heads = defaultdict(list)
     for head in repo.heads:
         heads[head.commit.hexsha].append(head)
+
+    if all:
+        for ref in [ref for remote in repo.remotes for ref in remote.refs]:
+            heads[ref.commit.hexsha].append(ref)
 
     tags = defaultdict(list)
     for tag in repo.tags:
@@ -155,10 +184,33 @@ def arrange_commits(
     lattice to grow without control.
     """
 
-    def gap() -> int:
+    def ctsort():
+        """Chrono-topological sort.
+
+        Implement a variant of Kahn's algorithm for topological sorting where
+        time ordering is also taken into account.
+        """
+        sorted_commits = sorted(commits.items(), key=lambda x: x[1][0].committed_date)
+        parents = {h: {p.hexsha for p in commits[h][0].parents} for h in commits}
+        result = []
+        while sorted_commits:
+            i = 0
+            while True:
+                if not parents[sorted_commits[i][0]]:
+                    c = sorted_commits.pop(i)
+                    result.append(c)
+                    h = c[0]
+                    for child in children[h]:
+                        parents[child].remove(h)
+                    break
+                i += 1
+
+        return result
+
+    def gap(refs=True) -> int:
         """Get the first gap in the tracked levels."""
         if not refs_levels:
-            return 0
+            return 0 if refs else 1
 
         levels = sorted({l for _, l in refs_levels.items()})
         for n, m in zip(levels, levels[1:]):
@@ -167,7 +219,7 @@ def arrange_commits(
 
         return levels[-1] + 1
 
-    sorted_commits = sorted(commits.items(), key=lambda x: x[1][0].committed_date)
+    sorted_commits = ctsort()
     h, (initial, refs) = sorted_commits[0]  # Initial commit
 
     # Map the head commits with their children.
@@ -188,43 +240,31 @@ def arrange_commits(
     seen_heads = set()
 
     locations = {h: (0, 0)}
-    for h, (c, refs) in sorted_commits[1:]:
+    for i, (h, (c, refs)) in enumerate(sorted_commits[1:]):
         x = None
         active_refs = set(refs_levels)
         LOGGER.debug(f"{h[:7]} :: refs: {str([r.name for r in refs])}")
         if not refs:  # Commit has no refs
             # Take the position of the lowest parent
-            p, px = sorted(
+            p, x = sorted(
                 [(p.hexsha, locations[p.hexsha][0]) for p in c.parents],
                 key=lambda x: x[1],
             )[0]
-
-            # Get all the children of the lowest parent that are in the future
-            # wrt to the current commit.
-            # TODO: This could cause clashes if we don't look for all the
-            # parents!
             future_children = {
                 child
                 for child in children[p]
-                if commits[child][0].committed_date > c.committed_date
+                if child in {h for h, _ in sorted_commits[i + 2 :]}
             }
+            if future_children:
+                x = gap(refs=False)
 
-            # Count all the future children that have no or only new refs, and
-            # those whose refs are a superset of the parent refs.
-            x = px + sum(
-                1
-                for child in future_children
-                if not (commits[child][1] and commits[child][1] & set(refs_levels))
-                or (commits[child][1] & commits[p][1] == commits[p][1])
-            )
+            LOGGER.debug(f"  no refs, x = {x}, future_children = {future_children}")
+
         elif not refs & set(refs_levels):  # Commit has new refs only
             LOGGER.debug("  new refs only")
             # For each parent, look at the future children wrt to the current
             # commit and count those with only new refs or those whose refs
             # are a superset of the parent's refs. Then take the minimum.
-            LOGGER.debug(
-                f"    future children: { [(p.hexsha[:7], {child[:7] for child in children[p.hexsha] if commits[child][0].committed_date > c.committed_date}) for p in c.parents]}"
-            )
             x = gap()
         else:  # Commit has tracked refs
             LOGGER.debug("  commit has tracked refs")
@@ -241,36 +281,9 @@ def arrange_commits(
                     f"{str([r.name for r in commits[p.hexsha][1] & active_refs])}"
                 )
                 if current_refs == commits[p.hexsha][1] & active_refs:
-                    LOGGER.debug("  same as parent ")
+                    x = locations[p.hexsha][0]
                     LOGGER.debug(
-                        f"  "
-                        + str(
-                            [
-                                (
-                                    child,
-                                    [r.name for r in commits[child][1]],
-                                    [r.name for r in commits[p.hexsha][1]],
-                                    [r.name for r in active_refs],
-                                )
-                                for p in c.parents
-                                for child in children[p.hexsha]
-                                if child != h
-                            ]
-                        )
-                    )
-                    # if a parent of this commit has a child with the same
-                    # active references then the rail from that parent goes
-                    # straight and we need to move to a new level.
-                    x = (
-                        gap()
-                        if any(
-                            commits[child][1] & commits[p.hexsha][1] & active_refs
-                            == commits[p.hexsha][1] & active_refs
-                            for p in c.parents
-                            for child in children[p.hexsha]
-                            if child != h
-                        )
-                        else locations[p.hexsha][0]
+                        f"  same as parent {p.hexsha[:7]} :: x = {x}, px = {locations[p.hexsha][0]}"
                     )
 
                 elif any(
@@ -281,7 +294,7 @@ def arrange_commits(
                     # currently active refs on commit are a proper subset of
                     # currently active parent refs at each tracked level.
                     LOGGER.debug(
-                        f"    diverged from parent: {current_refs} < {commits[p.hexsha][1]}"
+                        f"    {h[:7]} diverged from parent: {current_refs} < {commits[p.hexsha][1]}"
                     )
                     # try lowest ref
                     x = min(refs_levels[ref] for ref in current_refs)
@@ -346,16 +359,36 @@ def generate_commit_data(
             else text
         )
 
+    def conv_commit(text):
+        text = issue_link(text)
+        if ": " not in text:
+            return {"type": None, "scope": None, "title": text}
+
+        cc, _, title = text.partition(": ")
+        type, _, scope = cc.strip(")").partition("(")
+        if " " in type:
+            return {"type": None, "scope": None, "title": text}
+
+        return {"type": type, "scope": scope, "title": title}
+
+    def message(commit):
+        result = conv_commit(issue_link(commit.summary))
+        result["body"] = (
+            issue_link(commit.message.replace(commit.summary, "", 1))
+            .strip()
+            .replace(" \n", " ")
+            .replace(" \r\n", " ")
+        )
+        result["is_breaking"] = "BREAKING CHANGE: " in commit.message
+
+        return result
+
     return {
         h: {
             "hash": h[:7],
             "author": f'<a href="mailto:{c.author.email}">{c.author.name}</a>',
             "committer": f'<a href="mailto:{c.committer.email}">{c.committer.name}</a>',
-            "title": issue_link(c.summary),
-            "message": issue_link(c.message.replace(c.summary, "", 1))
-            .strip()
-            .replace(" \n", " ")
-            .replace(" \r\n", " "),
+            "message": message(c),
             "authored_date": str(c.authored_datetime),
             "committed_date": str(c.committed_datetime),
             "authored_date_delta": pretty_date(c.authored_date),

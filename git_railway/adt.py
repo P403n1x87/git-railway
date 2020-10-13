@@ -21,6 +21,27 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
+class Map(dict):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self._inv = {}
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        self._inv[value] = key
+
+    def __call__(self, key):
+        return self[key]
+
+    def inv(self, value):
+        return self._inv[value]
+
+    @property
+    def image(self):
+        return self._inv
+
+
 class IndexedList(list):
     """List with an underlying index for fast lookups."""
 

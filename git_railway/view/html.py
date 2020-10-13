@@ -31,6 +31,8 @@ TEMPLATE = """<!doctype html>
   <meta charset="utf-8">
   <title>{title} - Git Railway</title>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Ubuntu+Mono:wght@400;700&display=swap');
+
     html, body {{
       width: 100%;
       height: 100%;
@@ -47,8 +49,14 @@ TEMPLATE = """<!doctype html>
     }}
 
     #railway {{
-        flex: 0 0 auto;
+        flex: 1 0 auto;
         overflow-y: auto;
+    }}
+
+    #railway_svg {{
+        position: relative;
+        left: 50%;
+        transform: translate(-50%);
     }}
 
     #info {{
@@ -60,42 +68,64 @@ TEMPLATE = """<!doctype html>
     #infobox {{
         color: #dddddd;
         background-color: #323232;
+        background-color: rgba(50, 50, 50, 0.9);
         border-radius: 12px;
         padding: 24px;
         width: 100%;
         max-width: 480px;
         height: 320px;
-        position: absolute;
-        top: 50%;
+        position: fixed;
+        /*top: 50%;
         bottom: 50%;
         left: 50%;
-        transform: translate(-50%, -50%);
+        transform: translate(-50%, -50%);*/
         display: flex;
         flex-direction: column;
         visibility: hidden;
+        opacity: 0%;
+        transition: opacity 0.1s linear;
         -webkit-box-shadow: 0px 0px 64px -16px rgba(0,0,0,0.75);
         -moz-box-shadow: 0px 0px 64px -16px rgba(0,0,0,0.75);
         box-shadow: 0px 0px 64px -16px rgba(0,0,0,0.75);
+        backdrop-filter: blur(8px);
     }}
 
     #message {{
         padding: 8px 0;
+        font-family: "Ubuntu Mono", "monospace";
         font-size: 90%;
         flex: 1 0 0;
         white-space: pre-wrap;
         overflow-y: auto;
         min-height: 0;
-        line-height: 1.5;
+        line-height: 1.25;
     }}
 
     #hash {{
         font-weight: bold;
         color: #d07d49;
+        padding-right: .5em;
+    }}
+
+    .cc {{
+        padding: 2px 8px;
+    }}
+
+    #type {{
+        background: #282828;
+        color: #5ce7f5;
+    }}
+
+    #scope {{
+        background: #5ce7f5;
+        color: #282828;
     }}
 
     #title {{
         font-weight: bold;
         color: #e8e9a9;
+        padding-left: .5em;
+        line-height: 1.25;
     }}
 
     .metadata {{
@@ -140,9 +170,9 @@ TEMPLATE = """<!doctype html>
 <body>
     <div id="app">
         <div id="railway">{svg}</div>
-        <div id="info">
+        <!--<div id="info">-->
             <div id="infobox">
-                <div><span id="hash"></span> <span id="title"></span></div>
+                <div><span id="hash"></span><span id="type" class="cc"></span><span id="scope" class="cc"></span><span id="title"></span></div>
                 <pre id="message"></pre>
                 <div class="metadata">
                     Authored by <span class="actor" id="author"></span> (<span class="date" id="authored-date"></span>)
@@ -151,37 +181,75 @@ TEMPLATE = """<!doctype html>
                     Committed by <span class="actor" id="committer"></span> (<span class="date" id="committed-date"></span>)
                 </div>
             </div>
-        </div>
+        <!--</div>-->
     </div>
 
     <script>
+        let data = {data};
+        var infoboxTimer;
+
         window.addEventListener('mouseover', (e) => {{
-
-            data = {data}
-
-            hash = document.getElementById("hash");
-            title = document.getElementById("title");
-            message = document.getElementById("message");
-            author = document.getElementById("author");
-            authored_date = document.getElementById("authored-date");
-            committer = document.getElementById("committer");
-            committed_date = document.getElementById("committed-date");
-
             if (data[e.target.id]) {{
+                infobox = document.getElementById("infobox");
+                maxY = window.innerHeight - infobox.offsetHeight;
+                infobox.style.top = Math.min(e.clientY, maxY) + "px";
+                infobox.style.left = e.clientX + 12 + "px";
+
+                hash = document.getElementById("hash");
+                type = document.getElementById("type");
+                scope = document.getElementById("scope");
+                title = document.getElementById("title");
+                message = document.getElementById("message");
+                author = document.getElementById("author");
+                authored_date = document.getElementById("authored-date");
+                committer = document.getElementById("committer");
+                committed_date = document.getElementById("committed-date");
+
                 document.getElementById("infobox").style.visibility = "visible";
+                document.getElementById("infobox").style.opacity = "100%";
 
                 commit = data[e.target.id]
                 hash.innerHTML = commit.hash;
-                title.innerHTML = commit.title;
-                message.innerHTML = commit.message;
+                if (commit.message.type) {{
+                    type.style.display = "inline";
+                    type.innerHTML = commit.message.type;
+                }} else {{
+                    type.style.display = "none";
+                }}
+                if (commit.message.scope) {{
+                    scope.style.display = "inline";
+                    scope.innerHTML = commit.message.scope;
+                }} else {{
+                    scope.style.display = "none";
+                }}
+                title.innerHTML = commit.message.title;
+                message.innerHTML = commit.message.body;
                 author.innerHTML = commit.author
                 committer.innerHTML = commit.committer
                 authored_date.innerHTML = commit.authored_date_delta
                 authored_date.setAttribute("title", commit.authored_date)
                 committed_date.innerHTML = commit.committed_date_delta
                 committed_date.setAttribute("title", commit.committed_date)
-
             }}
+
+            if (!e.target.id.includes("railway")) {{
+                if (infoboxTimer != null) {{
+                    clearTimeout(infoboxTimer);
+                    infoboxTimer = null;
+                }}
+            }} else {{
+                if (infoboxTimer == null) {{
+                    infoboxTimer = setTimeout(
+                        function () {{
+                            document.getElementById("infobox").style.opacity = "0%";
+                            document.getElementById("infobox").style.visibility = "hidden";
+                            infoboxTimer = null;
+                        }},
+                        200
+                    );
+                }}
+            }}
+
         }})
     </script>
 </body>
@@ -190,4 +258,8 @@ TEMPLATE = """<!doctype html>
 
 
 def write_html(stream, svg: str, commit_data, title: str) -> None:
-    stream.write(TEMPLATE.format(svg=svg, data=json.dumps(commit_data), title=title))
+    stream.write(
+        TEMPLATE.format(svg=svg, data=json.dumps(commit_data), title=title).encode(
+            "utf-8"
+        )
+    )

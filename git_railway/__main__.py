@@ -39,9 +39,18 @@ def parse_args():
     parser = ArgumentParser(prog="git-railway")
 
     parser.add_argument(
+        "-a",
+        "--all",
+        action="store_true",
+        help="Show all branches, including remote ones.",
+        default=False,
+    )
+
+    parser.add_argument(
         "--gh",
         type=str,
-        help="GitHub slug. If provided, issue references are replaced with links.",
+        help="GitHub slug override. If not provided, there will be an attempt to "
+        "derive it from the repository remotes.",
     )
 
     parser.add_argument(
@@ -56,7 +65,6 @@ def parse_args():
 
 
 def main():
-
     cwd = os.getcwd()
     path = cwd
     while True:
@@ -72,17 +80,25 @@ def main():
 
     args = parse_args()
 
-    commits, children = collect_commits(repo)
-    heads, tags = get_refs(repo)
+    commits, children = collect_commits(repo, args.all)
+    heads, tags = get_refs(repo, args.all)
 
     locations = arrange_commits(commits, heads, children)
 
     svg = SvgRailway()
 
-    commit_data = generate_commit_data(commits, args.gh)
+    try:
+        gh_url, *_ = [
+            url for remote in repo.remotes for url in remote.urls if "github.com" in url
+        ]
+        _, _, gh_slug = gh_url.replace(".git", "").partition("github.com/")
+    except Exception:
+        gh_slug = None
+
+    commit_data = generate_commit_data(commits, args.gh or gh_slug)
 
     output = os.path.abspath(os.path.expanduser(args.output)) or "railway.html"
-    with open(output, "w") as fout:
+    with open(output, "wb") as fout:
         write_html(
             fout,
             svg.draw(commits, locations, heads, tags, children),

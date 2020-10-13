@@ -20,10 +20,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from collections import defaultdict
 from functools import lru_cache
 from hashlib import md5
 
 from colour import Color
+from git import TagReference
 from git_railway.adt import IndexedList
 from svgwrite import Drawing
 
@@ -66,7 +68,7 @@ class SvgRailway(Drawing, LayeredMixin):
     REF_A = 0
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs, id="railway_svg")
         LayeredMixin.__init__(self)
 
         self.add_layer("rails")
@@ -75,6 +77,7 @@ class SvgRailway(Drawing, LayeredMixin):
 
     @staticmethod
     def _add_s(path, dx=1, dy=1):
+        # TODO: Use vectors
         path.push(
             "c",
             0,
@@ -104,10 +107,6 @@ class SvgRailway(Drawing, LayeredMixin):
         dx = x - px
         for i, color in enumerate(colors):
             if middle:
-                dl = dr = dx
-                if dl & 1 == 0:
-                    dl -= 1
-                    dr += 1
                 path = self.path(
                     [
                         (
@@ -120,9 +119,19 @@ class SvgRailway(Drawing, LayeredMixin):
                     stroke_width=w,
                     fill="none",
                 )
-                SvgRailway._add_s(path, dl / 2)
-                path.push("V", self.PADDING_Y + self.STEP_Y * (py - 1))
-                SvgRailway._add_s(path, dr / 2)
+                if dx:
+                    dl = dr = dx
+                    if dl & 1 == 0:
+                        dl -= 1
+                        dr += 1
+                    SvgRailway._add_s(path, dl / 2)
+                    path.push("V", self.PADDING_Y + self.STEP_Y * (py - 1))
+                    SvgRailway._add_s(path, dr / 2)
+                else:
+                    SvgRailway._add_s(path, -0.5)
+                    path.push("V", self.PADDING_Y + self.STEP_Y * (py - 1))
+                    SvgRailway._add_s(path, 0.5)
+
                 layer.insert(0, path)
 
             elif dx:
@@ -195,34 +204,35 @@ class SvgRailway(Drawing, LayeredMixin):
                 commit.hexsha[:7],
                 (px, py),
                 fill="#c9bcbc",
-                font_family="monospace",
+                font_family="Ubuntu Mono",
                 font_size="50%",
                 # transform=f"rotate({self.REF_A}, {px}, {py})",
             )
         )
 
-    def ref(self, ref, x, y, color, i=0):
-        prefix = ""
-        font_size = "65%"
-        if hasattr(ref, "tag"):
-            color = "#dad7bc"
-            prefix = "🏷 "
-            font_size = "55%"
+    def refs(self, refs, x, y):
         px, py = (
             self.PADDING_X + x * self.STEP_X + self.PADDING_Y,
-            self.PADDING_Y + y * self.STEP_Y + 10 * i + 2,
+            self.PADDING_Y + y * self.STEP_Y + 2,
         )
-        self.get_layer("labels").append(
-            self.text(
-                prefix + ref.name,
-                (px, py),
-                fill=color,
-                font_family="monospace",
-                font_size=font_size,
-                font_weight="bold",
-                # transform=f"rotate({self.REF_A}, {px}, {py})",
+        text = self.text("", (px, py))
+        for ref in refs:
+            if isinstance(ref, TagReference):
+                color = "#dad7bc"
+                prefix = "🏷 "
+            else:
+                color = ref_to_color(ref)
+                prefix = ""
+            text.add(
+                self.tspan(
+                    prefix + ref.name + " ",
+                    fill=color,
+                    font_family="Ubuntu Mono",
+                    font_size="60%",
+                    font_weight="bold",
+                )
             )
-        )
+        self.get_layer("labels").append(text)
 
     def draw(self, commits, locations, heads, tags, children):
         max_y = max(y for _, (_, y) in locations.items())
@@ -277,8 +287,10 @@ class SvgRailway(Drawing, LayeredMixin):
                         ]
                 except IndexError:
                     colors = ["gray"]
-                if not colors:
-                    colors = ["gray"]
+
+                colors = colors or (
+                    [ref_to_color(ref) for ref in refs] if refs and prefs else ["gray"]
+                )
 
                 self.rail(
                     x,
@@ -286,8 +298,7 @@ class SvgRailway(Drawing, LayeredMixin):
                     px,
                     py,
                     colors,
-                    x != px
-                    and any(
+                    any(
                         True
                         for _, (rx, ry) in locations.items()
                         if rx == (px if px > x else x) and py > max_y - ry > y
@@ -301,19 +312,20 @@ class SvgRailway(Drawing, LayeredMixin):
             #         color = ref_to_color(sorted(list(refs), key=lambda x: x.name)[0])
             # except IndexError:
             #     color = "gray"
-            self.stop(x, y, "#dbdbdb", commit)
+            color = "#ff4545" if "BREAKING CHANGE: " in commit.message else "#dbdbdb"
+            self.stop(x, y, color, commit)
 
-        for h, refs in heads.items():
+        refs = defaultdict(list)
+
+        for h, r in tags.items():
+            refs[h] += r
+        for h, r in heads.items():
+            refs[h] += r
+
+        for h, r in refs.items():
             x, y = locations[h]
             y = max_y - y
-            for i, ref in enumerate(refs):
-                self.ref(ref, max_x, y, ref_to_color(ref), i)
-
-        for h, refs in tags.items():
-            x, y = locations[h]
-            y = max_y - y
-            for i, ref in enumerate(refs):
-                self.ref(ref, max_x, y, ref_to_color(ref), i)
+            self.refs(r, x, y)
 
         for _, layer in self.layers:
             for e in layer:
