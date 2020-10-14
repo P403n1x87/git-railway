@@ -309,6 +309,12 @@ def arrange_commits(
                         LOGGER.debug(f"      need a new level: m = {m}, x = {x}")
                 elif not commits[p.hexsha][1]:  # parent has no refs
                     x = locations[p.hexsha][0]  # use parent level
+                elif any(
+                    {r for r, j in refs_levels.items() if j == i and r in current_refs}
+                    == current_refs
+                    for i in {l for _, l in refs_levels.items()}
+                ):
+                    x = refs_levels[next(iter(current_refs))]
                 else:
                     x = gap()
                     LOGGER.debug(f"    new level: {x}")
