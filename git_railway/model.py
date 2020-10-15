@@ -87,7 +87,7 @@ def collect_commits(
 
     def add_commit(commit: Commit) -> None:
         if commit.hexsha in commits:
-            pass
+            return
 
         commits[commit.hexsha] = commit
         for p in commit.parents:
