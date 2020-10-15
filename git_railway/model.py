@@ -97,33 +97,40 @@ def collect_commits(
     commits: Dict[Hash, Tuple[Commit, Set[Reference]]] = {}
     children: Dict[Hash, Set[Hash]] = defaultdict(set)
 
-    def add_commits(commit: Commit) -> None:
-        """Add commits recursively"""
-        if commit.hexsha in commits:
-            return
-
+    def add_commit(commit: Commit) -> None:
         commits[commit.hexsha] = commit
         for p in commit.parents:
             children[p.hexsha].add(commit.hexsha)
-            add_commits(p)
 
     tracking = Map()
+
+    s = []  # Initial set of head commits for the iterative process
 
     # Collect all the commits that are reachable from the current heads
     for head in repo.heads:
         remote_ref = head.tracking_branch()
         if remote_ref:
             tracking[remote_ref] = head
-        add_commits(head.commit)
+        s.append(head.commit)
 
+    # Collect all the commits that are reachable from a tag
     for tag in repo.tags:
         if tag.commit.hexsha not in commits:
-            add_commits(tag.commit)
+            s.append(tag.commit)
 
     if all:
+        # Collect all the commits that are reachable from untracked remotes
         remote_refs = [ref for remote in repo.remotes for ref in remote.refs]
         for ref in remote_refs:
-            add_commits(ref.commit)
+            s.append(ref.commit)
+
+    # Actually collect commits iteratively (to avoid call stack overflows)
+    while s:
+        commit = s.pop()
+        add_commit(commit)
+
+        for p in commit.parents:
+            s.append(p)
 
     # Look at the reflog to infer what ref was on which commit.
     labelled_commits = {h: (c, set()) for h, c in commits.items()}
