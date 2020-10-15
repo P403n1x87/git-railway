@@ -22,24 +22,12 @@
 
 from collections import defaultdict
 from datetime import datetime
-import logging
-import os
 import re
 from typing import Dict, List, Set, Tuple
 
+from git_railway import LOGGER
 from git_railway.adt import Map
 from git import Head, Repo, Commit, Reference, TagReference
-
-
-LOGGER = logging.getLogger()
-handler = logging.StreamHandler()
-handler.setFormatter(
-    logging.Formatter("%(asctime)s %(name)-12s %(levelname)-8s %(message)s")
-)
-LOGGER.addHandler(handler)
-LOGGER.setLevel(
-    getattr(logging, os.environ.get("GIT_RAILWAY_DEBUG_LEVEL", "INFO").upper())
-)
 
 
 ISSUE_RE = re.compile("#([0-9]+)")
@@ -98,39 +86,44 @@ def collect_commits(
     children: Dict[Hash, Set[Hash]] = defaultdict(set)
 
     def add_commit(commit: Commit) -> None:
+        if commit.hexsha in commits:
+            pass
+
         commits[commit.hexsha] = commit
         for p in commit.parents:
             children[p.hexsha].add(commit.hexsha)
 
     tracking = Map()
 
-    s = []  # Initial set of head commits for the iterative process
+    s = set()  # Initial set of head commits for the iterative process
 
     # Collect all the commits that are reachable from the current heads
     for head in repo.heads:
         remote_ref = head.tracking_branch()
         if remote_ref:
             tracking[remote_ref] = head
-        s.append(head.commit)
+        s.add(head.commit)
 
     # Collect all the commits that are reachable from a tag
     for tag in repo.tags:
         if tag.commit.hexsha not in commits:
-            s.append(tag.commit)
+            s.add(tag.commit)
 
     if all:
         # Collect all the commits that are reachable from untracked remotes
         remote_refs = [ref for remote in repo.remotes for ref in remote.refs]
         for ref in remote_refs:
-            s.append(ref.commit)
+            s.add(ref.commit)
 
     # Actually collect commits iteratively (to avoid call stack overflows)
     while s:
-        commit = s.pop()
+        commit = next(iter(s))
         add_commit(commit)
+        s.remove(commit)
 
         for p in commit.parents:
-            s.append(p)
+            if p.hexsha not in commits:
+                s.add(p)
 
     # Look at the reflog to infer what ref was on which commit.
     labelled_commits = {h: (c, set()) for h, c in commits.items()}
@@ -278,16 +271,15 @@ def arrange_commits(
             px = {}
             m = max(l for _, l in refs_levels.items())
             for p in c.parents:
-                # If the commit has the same tracked refs as the parent then
-                # put on the same level as parent. Else put on one of the
-                # lowest refs if they are on a different level than the parent
                 current_refs = refs & active_refs
                 LOGGER.debug(
                     f"    {str([r.name for r in current_refs])}"
-                    " =?= "
+                    " >?= "
                     f"{str([r.name for r in commits[p.hexsha][1] & active_refs])}"
                 )
-                if current_refs == commits[p.hexsha][1] & active_refs:
+                if current_refs >= commits[p.hexsha][1] & active_refs:
+                    # If the commit has all the tracked refs of the parent then
+                    # put on the same level as parent.
                     x = locations[p.hexsha][0]
                     LOGGER.debug(
                         f"  same as parent {p.hexsha[:7]} :: x = {x}, px = {locations[p.hexsha][0]}"
