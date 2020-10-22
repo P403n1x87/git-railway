@@ -33,13 +33,13 @@ from svgwrite import Drawing
 @lru_cache(maxsize=32)
 def ref_to_color(ref):
     color = Color(hex=f"#{md5(ref.name.encode()).hexdigest()[2:8]}")
-    if color.saturation < 0.4:
-        color.saturation = 0.4
-    elif color.saturation > 0.5:
-        color.saturation = 0.5
+    if color.saturation < 0.6:
+        color.saturation = 0.6
+    elif color.saturation > 0.7:
+        color.saturation = 0.7
 
-    if color.luminance < 0.6:
-        color.luminance = 0.6
+    if color.luminance < 0.7:
+        color.luminance = 0.7
     elif color.luminance > 0.9:
         color.luminance = 0.9
     return color.get_hex()
@@ -211,38 +211,21 @@ class SvgRailway(Drawing, LayeredMixin):
             )
         )
 
-    def refs(self, refs, x, y):
-        px, py = (
-            self.PADDING_X + x * self.STEP_X + self.PADDING_Y,
-            self.PADDING_Y + y * self.STEP_Y + 2,
+        text = self.text(
+            "",
+            (
+                self.PADDING_X + x * self.STEP_X + self.PADDING_Y,
+                self.PADDING_Y + y * self.STEP_Y + 2,
+            ),
         )
-        text = self.text("", (px, py))
-        length = 0
-        for ref in refs:
-            if isinstance(ref, TagReference):
-                color = "#dad7bc"
-                prefix = "🏷 "
-            else:
-                color = ref_to_color(ref)
-                prefix = ""
-            label = prefix + ref.name + " "
-            text.add(
-                self.tspan(
-                    label,
-                    fill=color,
-                    font_family="Ubuntu Mono",
-                    font_size="60%",
-                    font_weight="bold",
-                )
-            )
-            length += len(label)
         self.get_layer("labels").append(text)
+        return text
 
-        return length
-
-    def draw(self, commits, locations, heads, tags, children):
+    def draw(self, commits, locations, heads, tags, children, verbose=False, scale=1):
         max_y = max(y for _, (_, y) in locations.items())
         max_x = max(x for _, (x, _) in locations.items())
+
+        maxlen = {0}
 
         # Add rails and stops
         for h, (commit, refs) in commits.items():
@@ -313,7 +296,44 @@ class SvgRailway(Drawing, LayeredMixin):
             # except IndexError:
             #     color = "gray"
             color = "#ff4545" if "BREAKING CHANGE: " in commit.message else "#dbdbdb"
-            self.stop(x, y, color, commit)
+            text = self.stop(x, y, color, commit)
+            length = 0
+            for tag in tags.get(h, []):
+                label = f"🏷 {tag.name} "
+                text.add(
+                    self.tspan(
+                        label,
+                        fill="#dad682",
+                        font_family="Ubuntu Mono",
+                        font_size="60%",
+                        font_weight="bold",
+                    )
+                )
+                length += len(label)
+
+            for head in heads.get(h, []):
+                label = f"{head.name} "
+                text.add(
+                    self.tspan(
+                        label,
+                        fill=ref_to_color(head),
+                        font_family="Ubuntu Mono",
+                        font_size="60%",
+                        font_weight="bold",
+                    )
+                )
+                length += len(label)
+            if verbose:
+                text.add(
+                    self.tspan(
+                        commit.summary,
+                        fill="#a0a0a0",
+                        font_family="Ubuntu Mono",
+                        font_size="60%",
+                    )
+                )
+                length += len(commit.summary)
+            maxlen.add(length * 5 + self.PADDING_X + x * self.STEP_X + self.PADDING_Y)
 
         refs = defaultdict(list)
 
@@ -322,20 +342,20 @@ class SvgRailway(Drawing, LayeredMixin):
         for h, r in heads.items():
             refs[h] += r
 
-        maxlen = {0}
-        for h, r in refs.items():
-            x, y = locations[h]
-            y = max_y - y
-            maxlen.add(self.refs(r, x, y) * 2 - (max_x - x) * self.STEP_X + 4)
+        # maxlen = {0}
+        # for h, r in refs.items():
+        #     x, y = locations[h]
+        #     y = max_y - y
+        #     maxlen.add(self.refs(r, x, y) * 2 - (max_x - x) * self.STEP_X + 4)
 
         for _, layer in self.layers:
             for e in layer:
                 self.add(e)
 
         height = max_y * self.STEP_Y + self.PADDING_Y * 2
-        width = max_x * self.STEP_X + self.PADDING_X + self.STOP_R + max(maxlen) * 3
+        width = max(maxlen)
         self["viewBox"] = f"0 0 {width} {height}"
-        self["height"] = height * self.SCALE
-        self["width"] = width * self.SCALE
+        self["height"] = height * self.SCALE * scale
+        self["width"] = width * self.SCALE * scale
 
         return self.tostring()

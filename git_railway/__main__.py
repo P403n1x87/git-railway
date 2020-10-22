@@ -42,7 +42,7 @@ def parse_args():
         "-a",
         "--all",
         action="store_true",
-        help="Show all branches, including remote ones.",
+        help="Show all branches, including remote ones",
         default=False,
     )
 
@@ -50,15 +50,27 @@ def parse_args():
         "--gh",
         type=str,
         help="GitHub slug override. If not provided, there will be an attempt to "
-        "derive it from the repository remotes.",
+        "derive it from the repository remotes",
     )
 
     parser.add_argument(
         "-o",
         "--output",
         type=str,
-        help="Output file. If not provided, the default is railway.html in the current directory.",
+        help="Output file. If not provided, the default is railway.html in the current directory",
         default="railway.html",
+    )
+
+    parser.add_argument(
+        "-s", "--scale", type=float, help="Scale factor; defaults to 1", default=1.0,
+    )
+
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Add inline commit summaries",
+        default=False,
     )
 
     return parser.parse_args()
@@ -101,7 +113,9 @@ def main():
     with open(output, "wb") as fout:
         write_html(
             fout,
-            svg.draw(commits, locations, heads, tags, children),
+            svg.draw(
+                commits, locations, heads, tags, children, args.verbose, args.scale
+            ),
             commit_data,
             title=os.path.basename(path),
         )
