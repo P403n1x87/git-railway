@@ -59,6 +59,7 @@ class LayeredMixin:
 
 
 class SvgRailway(Drawing, LayeredMixin):
+    SCALE = 1.5
     STEP_X = 24
     STEP_Y = 30
     PADDING_X = 50
@@ -216,6 +217,7 @@ class SvgRailway(Drawing, LayeredMixin):
             self.PADDING_Y + y * self.STEP_Y + 2,
         )
         text = self.text("", (px, py))
+        length = 0
         for ref in refs:
             if isinstance(ref, TagReference):
                 color = "#dad7bc"
@@ -223,26 +225,24 @@ class SvgRailway(Drawing, LayeredMixin):
             else:
                 color = ref_to_color(ref)
                 prefix = ""
+            label = prefix + ref.name + " "
             text.add(
                 self.tspan(
-                    prefix + ref.name + " ",
+                    label,
                     fill=color,
                     font_family="Ubuntu Mono",
                     font_size="60%",
                     font_weight="bold",
                 )
             )
+            length += len(label)
         self.get_layer("labels").append(text)
+
+        return length
 
     def draw(self, commits, locations, heads, tags, children):
         max_y = max(y for _, (_, y) in locations.items())
         max_x = max(x for _, (x, _) in locations.items())
-
-        height = max_y * self.STEP_Y + self.PADDING_Y * 2
-        width = max_x * self.STEP_X + 2 * self.PADDING_X + 100
-        self["viewBox"] = f"0 0 {width} {height}"
-        self["height"] = height * 1.5
-        self["width"] = width * 1.5
 
         # Add rails and stops
         for h, (commit, refs) in commits.items():
@@ -322,13 +322,20 @@ class SvgRailway(Drawing, LayeredMixin):
         for h, r in heads.items():
             refs[h] += r
 
+        maxlen = {0}
         for h, r in refs.items():
             x, y = locations[h]
             y = max_y - y
-            self.refs(r, x, y)
+            maxlen.add(self.refs(r, x, y) * 2 - (max_x - x) * self.STEP_X + 4)
 
         for _, layer in self.layers:
             for e in layer:
                 self.add(e)
+
+        height = max_y * self.STEP_Y + self.PADDING_Y * 2
+        width = max_x * self.STEP_X + self.PADDING_X + self.STOP_R + max(maxlen) * 3
+        self["viewBox"] = f"0 0 {width} {height}"
+        self["height"] = height * self.SCALE
+        self["width"] = width * self.SCALE
 
         return self.tostring()
