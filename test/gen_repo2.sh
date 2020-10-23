@@ -17,7 +17,6 @@ git checkout -b devel
 
 # * <- main, devel
 
-sleep 2
 git checkout -b "feature"
 echo "feature" > feature
 git add .
@@ -27,7 +26,6 @@ git commit -m "feature"
 # |
 # * <- main, devel
 
-sleep 2
 git checkout devel
 git merge --no-ff feature
 
@@ -37,7 +35,6 @@ git merge --no-ff feature
 # |/
 # * <- main
 
-sleep 2
 git checkout main
 git merge --no-ff devel
 git checkout devel

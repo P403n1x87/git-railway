@@ -3,7 +3,7 @@
 # See file LICENCE or go to http://www.gnu.org/licenses/ for full license
 # details.
 #
-# git-railway is top-like TUI for Austin.
+# git-railway is a visualisation tool for git branches.
 #
 # Copyright (c) 2018-2020 Gabriele N. Tornetta <phoenix1987@gmail.com>.
 # All rights reserved.

@@ -3,7 +3,7 @@
 # See file LICENCE or go to http://www.gnu.org/licenses/ for full license
 # details.
 #
-# git-railway is top-like TUI for Austin.
+# git-railway is a visualisation tool for git branches.
 #
 # Copyright (c) 2018-2020 Gabriele N. Tornetta <phoenix1987@gmail.com>.
 # All rights reserved.
@@ -25,7 +25,6 @@ from functools import lru_cache
 from hashlib import md5
 
 from colour import Color
-from git import TagReference
 from git_railway.adt import IndexedList
 from svgwrite import Drawing
 
@@ -309,7 +308,7 @@ class SvgRailway(Drawing, LayeredMixin):
                         font_weight="bold",
                     )
                 )
-                length += len(label)
+                length += len(label) * 5
 
             for head in heads.get(h, []):
                 label = f"{head.name} "
@@ -322,18 +321,18 @@ class SvgRailway(Drawing, LayeredMixin):
                         font_weight="bold",
                     )
                 )
-                length += len(label)
+                length += len(label) * 5
             if verbose:
                 text.add(
                     self.tspan(
                         commit.summary,
                         fill="#a0a0a0",
-                        font_family="Ubuntu Mono",
-                        font_size="60%",
+                        font_family="Ubuntu Condensed",
+                        font_size="55%",
                     )
                 )
-                length += len(commit.summary)
-            maxlen.add(length * 5 + self.PADDING_X + x * self.STEP_X + self.PADDING_Y)
+                length += len(commit.summary) * 3.5
+            maxlen.add(length + self.PADDING_X + x * self.STEP_X + self.PADDING_Y)
 
         refs = defaultdict(list)
 
