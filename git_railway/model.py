@@ -30,7 +30,7 @@ from git_railway.adt import Map
 from git import Head, Repo, Commit, Reference, TagReference
 
 
-ISSUE_RE = re.compile("#([0-9]+)")
+ISSUE_RE = re.compile("([^\s]+?/.+?|)#([0-9]+)")
 
 Hash = str
 
@@ -365,9 +365,9 @@ def generate_commit_data(
     def issue_link(text):
         return (
             ISSUE_RE.sub(
-                f'<a target="_blank" href="https://github.com/{gh}/issues/\g<1>">#\g<1></a>',
+                f'<a target="_blank" href="https://github.com/\g<1>/issues/\g<2>">\g<1>#\g<2></a>',
                 text,
-            )
+            ).replace("m//", f"m/{gh}/", 1)
             if gh
             else text
         )
@@ -385,7 +385,7 @@ def generate_commit_data(
         return {"type": type, "scope": scope, "title": title}
 
     def message(commit):
-        result = conv_commit(issue_link(commit.summary))
+        result = conv_commit(commit.summary)
         result["body"] = (
             issue_link(commit.message.replace(commit.summary, "", 1))
             .strip()
