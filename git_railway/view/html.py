@@ -28,6 +28,9 @@ from git_railway.resources import get_resource
 def write_html(stream, svg: str, commit_data, title: str) -> None:
     stream.write(
         get_resource(
-            "git_railway.html", title=title, svg=svg, data=json.dumps(commit_data),
+            "git_railway.html",
+            title=title,
+            svg=svg,
+            data=json.dumps(commit_data),
         ).encode("utf-8")
     )

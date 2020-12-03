@@ -62,7 +62,11 @@ def parse_args():
     )
 
     parser.add_argument(
-        "-s", "--scale", type=float, help="Scale factor; defaults to 1", default=1.0,
+        "-s",
+        "--scale",
+        type=float,
+        help="Scale factor; defaults to 1",
+        default=1.0,
     )
 
     parser.add_argument(
