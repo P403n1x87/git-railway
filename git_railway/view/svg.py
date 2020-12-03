@@ -3,7 +3,7 @@
 # See file LICENCE or go to http://www.gnu.org/licenses/ for full license
 # details.
 #
-# git-railway is top-like TUI for Austin.
+# git-railway is a visualisation tool for git branches.
 #
 # Copyright (c) 2018-2020 Gabriele N. Tornetta <phoenix1987@gmail.com>.
 # All rights reserved.
@@ -25,7 +25,6 @@ from functools import lru_cache
 from hashlib import md5
 
 from colour import Color
-from git import TagReference
 from git_railway.adt import IndexedList
 from svgwrite import Drawing
 
@@ -33,13 +32,13 @@ from svgwrite import Drawing
 @lru_cache(maxsize=32)
 def ref_to_color(ref):
     color = Color(hex=f"#{md5(ref.name.encode()).hexdigest()[2:8]}")
-    if color.saturation < 0.4:
-        color.saturation = 0.4
-    elif color.saturation > 0.5:
-        color.saturation = 0.5
+    if color.saturation < 0.6:
+        color.saturation = 0.6
+    elif color.saturation > 0.7:
+        color.saturation = 0.7
 
-    if color.luminance < 0.6:
-        color.luminance = 0.6
+    if color.luminance < 0.7:
+        color.luminance = 0.7
     elif color.luminance > 0.9:
         color.luminance = 0.9
     return color.get_hex()
@@ -59,6 +58,7 @@ class LayeredMixin:
 
 
 class SvgRailway(Drawing, LayeredMixin):
+    SCALE = 1.5
     STEP_X = 24
     STEP_Y = 30
     PADDING_X = 50
@@ -210,39 +210,21 @@ class SvgRailway(Drawing, LayeredMixin):
             )
         )
 
-    def refs(self, refs, x, y):
-        px, py = (
-            self.PADDING_X + x * self.STEP_X + self.PADDING_Y,
-            self.PADDING_Y + y * self.STEP_Y + 2,
+        text = self.text(
+            "",
+            (
+                self.PADDING_X + x * self.STEP_X + self.PADDING_Y,
+                self.PADDING_Y + y * self.STEP_Y + 2,
+            ),
         )
-        text = self.text("", (px, py))
-        for ref in refs:
-            if isinstance(ref, TagReference):
-                color = "#dad7bc"
-                prefix = "🏷 "
-            else:
-                color = ref_to_color(ref)
-                prefix = ""
-            text.add(
-                self.tspan(
-                    prefix + ref.name + " ",
-                    fill=color,
-                    font_family="Ubuntu Mono",
-                    font_size="60%",
-                    font_weight="bold",
-                )
-            )
         self.get_layer("labels").append(text)
+        return text
 
-    def draw(self, commits, locations, heads, tags, children):
+    def draw(self, commits, locations, heads, tags, children, verbose=False, scale=1):
         max_y = max(y for _, (_, y) in locations.items())
         max_x = max(x for _, (x, _) in locations.items())
 
-        height = max_y * self.STEP_Y + self.PADDING_Y * 2
-        width = max_x * self.STEP_X + 2 * self.PADDING_X + 100
-        self["viewBox"] = f"0 0 {width} {height}"
-        self["height"] = height * 1.5
-        self["width"] = width * 1.5
+        maxlen = {0}
 
         # Add rails and stops
         for h, (commit, refs) in commits.items():
@@ -313,7 +295,44 @@ class SvgRailway(Drawing, LayeredMixin):
             # except IndexError:
             #     color = "gray"
             color = "#ff4545" if "BREAKING CHANGE: " in commit.message else "#dbdbdb"
-            self.stop(x, y, color, commit)
+            text = self.stop(x, y, color, commit)
+            length = 0
+            for tag in tags.get(h, []):
+                label = f"🏷 {tag.name} "
+                text.add(
+                    self.tspan(
+                        label,
+                        fill="#dad682",
+                        font_family="Ubuntu Mono",
+                        font_size="60%",
+                        font_weight="bold",
+                    )
+                )
+                length += len(label) * 5
+
+            for head in heads.get(h, []):
+                label = f"{head.name} "
+                text.add(
+                    self.tspan(
+                        label,
+                        fill=ref_to_color(head),
+                        font_family="Ubuntu Mono",
+                        font_size="60%",
+                        font_weight="bold",
+                    )
+                )
+                length += len(label) * 5
+            if verbose:
+                text.add(
+                    self.tspan(
+                        commit.summary,
+                        fill="#a0a0a0",
+                        font_family="Ubuntu Condensed",
+                        font_size="55%",
+                    )
+                )
+                length += len(commit.summary) * 3.5
+            maxlen.add(length + self.PADDING_X + x * self.STEP_X + self.PADDING_Y)
 
         refs = defaultdict(list)
 
@@ -322,13 +341,20 @@ class SvgRailway(Drawing, LayeredMixin):
         for h, r in heads.items():
             refs[h] += r
 
-        for h, r in refs.items():
-            x, y = locations[h]
-            y = max_y - y
-            self.refs(r, x, y)
+        # maxlen = {0}
+        # for h, r in refs.items():
+        #     x, y = locations[h]
+        #     y = max_y - y
+        #     maxlen.add(self.refs(r, x, y) * 2 - (max_x - x) * self.STEP_X + 4)
 
         for _, layer in self.layers:
             for e in layer:
                 self.add(e)
+
+        height = max_y * self.STEP_Y + self.PADDING_Y * 2
+        width = max(maxlen)
+        self["viewBox"] = f"0 0 {width} {height}"
+        self["height"] = height * self.SCALE * scale
+        self["width"] = width * self.SCALE * scale
 
         return self.tostring()

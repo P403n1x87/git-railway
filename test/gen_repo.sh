@@ -16,7 +16,6 @@ git branch -M main
 
 # * <- main
 
-sleep 2
 git checkout -b devel
 echo "dev" > dev
 git add .
@@ -26,7 +25,6 @@ git commit -m "dev"
 #  /
 # * <- main
 
-sleep 2
 git checkout main
 git checkout -b "feature"
 echo "feature" > feature
@@ -39,7 +37,6 @@ git commit -m "feature"
 # |/
 # * <- main
 
-sleep 2
 git checkout main
 echo "release" > release
 git add .

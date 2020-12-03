@@ -56,7 +56,7 @@
 Git Railway is available from PyPI
 
 ~~~
-pip install git-railway
+pipx install git-railway
 ~~~
 
 
@@ -75,12 +75,16 @@ Your railway graph will be generated in `railway.html`. Use the `-o` or
 git-railway --output /tmp/mytemprailwaygraph.html
 ~~~
 
+## Remote Branches
+
 If you want to include all the remote branches to the railway graph, you can
 pass the `-a` or `--all` option, e.g.
 
 ~~~ shell
 git-railway --all
 ~~~
+
+## GitHub References
 
 If the remote repository is hosted on GitHub, issue and PR
 references are replaced with actual links. If the GitHub slug derived from the
@@ -90,6 +94,43 @@ remotes is wrong, you can override it with the `--gh` option, e.g.
 git-railway --gh p403n1x87/git-railway
 ~~~
 
+## Scaling
+
+You can control the size of the generated railway graph by setting the scaling
+factor with the `-s` or `--scale` option, e.g.
+
+~~~ shell
+git-railway -s 1.5
+~~~
+
+This will make the SVG 50% larger than normal.
+
+## Verbosity
+
+You can also control the amount of information to include using the `-v` or
+`--verbose` option. If you switch this on, the railway graph will inline the
+commit summary for easier navigation.
+
+~~~ shell
+git-railway -v
+~~~
+
+<p align="center">
+	<img alt="Git Railway Verbose Mode Example"
+	     src="art/verbose.png" />
+</p>
+
+## Conventional Commits
+
+If you're into the habit of using the [Conventional Commits] format for your
+commit messages, the popup window that appears when you hover over a commit will
+highlight that information for you. Additionally, commits that are marked as a
+_BREAKING CHANGE_ will have a different colour for easy identification.
+
+<p align="center">
+	<img alt="Git Railway Breaking Change Example"
+	     src="art/breaking_change.png" />
+</p>
 
 # Details
 
@@ -123,3 +164,6 @@ can start by sorting all the commits based on their timestamp, and then make
 some changes to Kahn's algorithm to ensure that we position oldest commits
 first. With the chronological sorting step at the beginning, the complexity is
 `O(n log n)`.
+
+
+[Conventional Commits]: https://www.conventionalcommits.org

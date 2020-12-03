@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>((% title %)) - Git Railway</title>
+  <style>{{ style.css }}</style>
+</head>
+
+<body>
+    <div id="app">
+        <div id="railway">((% svg %))</div>
+        <div id="infobox">
+            <div><span id="hash"></span><span id="type" class="cc"></span><span id="scope" class="cc"></span><span id="title"></span></div>
+            <pre id="message"></pre>
+            <div class="metadata">
+                Authored by <span class="actor" id="author"></span> (<span class="date" id="authored-date"></span>)
+            </div>
+            <div class="metadata">
+                Committed by <span class="actor" id="committer"></span> (<span class="date" id="committed-date"></span>)
+            </div>
+        </div>
+    </div>
+
+    <script>{{ popup.js }}</script>
+</body>
+</html>

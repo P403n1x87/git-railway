@@ -3,7 +3,7 @@
 # See file LICENCE or go to http://www.gnu.org/licenses/ for full license
 # details.
 #
-# git-railway is top-like TUI for Austin.
+# git-railway is a visualisation tool for git branches.
 #
 # Copyright (c) 2018-2020 Gabriele N. Tornetta <phoenix1987@gmail.com>.
 # All rights reserved.
@@ -30,7 +30,7 @@ from git_railway.adt import Map
 from git import Head, Repo, Commit, Reference, TagReference
 
 
-ISSUE_RE = re.compile("#([0-9]+)")
+ISSUE_RE = re.compile("([^\s]+?/.+?|)#([0-9]+)")
 
 Hash = str
 
@@ -138,8 +138,12 @@ def collect_commits(
 
     if all:
         for ref in [
-            ref for remote in repo.remotes for ref in remote.refs if ref not in tracking
+            ref
+            for remote in repo.remotes
+            for ref in remote.refs
+            if ref not in tracking and not ref.name.endswith(f"{remote.name}/HEAD")
         ]:
+            LOGGER.debug(ref.name)
             for h in [e.newhexsha for e in ref.log()]:
                 try:
                     labelled_commits[h][1].add(ref)
@@ -243,7 +247,11 @@ def arrange_commits(
     for i, (h, (c, refs)) in enumerate(sorted_commits[1:]):
         x = None
         active_refs = set(refs_levels)
-        LOGGER.debug(f"{h[:7]} :: refs: {str([r.name for r in refs])}")
+        LOGGER.debug(
+            f"{h[:7]} :: refs: {str([r.name for r in refs])} "
+            f"parents:{[p.hexsha[:7] for p in c.parents]} "
+            f"children: {[child[:7] for child in children[h]]}"
+        )
         if not refs:  # Commit has no refs
             # Take the position of the lowest parent
             p, x = sorted(
@@ -293,17 +301,17 @@ def arrange_commits(
                     # currently active refs on commit are a proper subset of
                     # currently active parent refs at each tracked level.
                     LOGGER.debug(
-                        f"    {h[:7]} diverged from parent: {current_refs} < {commits[p.hexsha][1]}"
+                        f"    diverged from parent: {[r.name for r in current_refs]} < {[r.name for r in commits[p.hexsha][1]]}"
                     )
                     # try lowest ref
                     x = min(refs_levels[ref] for ref in current_refs)
                     LOGGER.debug(
                         f"    {x} =?= {locations[p.hexsha][0]} :: {[r.name for r in commits[p.hexsha][1]]} <?= {[r.name for r in active_refs]}"
                     )
-                    if x == locations[p.hexsha][0]:
+                    if x == locations[p.hexsha][0] and len(children[p.hexsha]) != 1:
                         # lowest ref is same level as parent but we have
                         # diverged from this parent so we must go on a
-                        # different level.
+                        # different level if parent has multiple children.
                         x = gap()
                         LOGGER.debug(f"      need a new level: m = {m}, x = {x}")
                 elif not commits[p.hexsha][1]:  # parent has no refs
@@ -357,9 +365,9 @@ def generate_commit_data(
     def issue_link(text):
         return (
             ISSUE_RE.sub(
-                f'<a target="_blank" href="https://github.com/{gh}/issues/\g<1>">#\g<1></a>',
+                f'<a target="_blank" href="https://github.com/\g<1>/issues/\g<2>">\g<1>#\g<2></a>',
                 text,
-            )
+            ).replace("m//", f"m/{gh}/", 1)
             if gh
             else text
         )
@@ -377,7 +385,7 @@ def generate_commit_data(
         return {"type": type, "scope": scope, "title": title}
 
     def message(commit):
-        result = conv_commit(issue_link(commit.summary))
+        result = conv_commit(commit.summary)
         result["body"] = (
             issue_link(commit.message.replace(commit.summary, "", 1))
             .strip()
